@@ -189,7 +189,7 @@
         }
 
         .subject-title { font-size: 1.2rem; font-weight: bold; color: #FFD700; }
-        .subject-progress { font-size: 0.9rem; color: #ddd; margin-top: 4px; }
+        .subject-progress { font-size: 0.9rem; color: #ddd; margin-top: 4px; text-align: right;}
 
         /* Selos de Status Diário */
         .badge {
@@ -493,7 +493,9 @@
                 sequence: sequence,
                 currentIndex: 0,
                 isCustom: isCustom,
-                lastStudiedDate: null
+                lastStudiedDate: null,
+                startDate: new Date().toISOString(),
+                endDate: null
             };
 
             subjects.push(newSubject);
@@ -528,6 +530,12 @@
                         if (subject.currentIndex > novaSequencia.length) {
                             subject.currentIndex = novaSequencia.length;
                         }
+                        // Verifica se após editar a lista o ciclo ficou concluído
+                        if (subject.currentIndex >= novaSequencia.length && !subject.endDate) {
+                            subject.endDate = new Date().toISOString();
+                        } else if (subject.currentIndex < novaSequencia.length && subject.endDate) {
+                            subject.endDate = null; // Reativou o ciclo
+                        }
                     } else {
                         alert("A lista não pode ficar vazia.");
                     }
@@ -542,6 +550,12 @@
                         // Ajusta o progresso caso o novo total gere uma sequência menor
                         if (subject.currentIndex > subject.sequence.length) {
                             subject.currentIndex = subject.sequence.length;
+                        }
+                        // Verifica se após editar o ciclo ficou concluído
+                        if (subject.currentIndex >= subject.sequence.length && !subject.endDate) {
+                            subject.endDate = new Date().toISOString();
+                        } else if (subject.currentIndex < subject.sequence.length && subject.endDate) {
+                            subject.endDate = null; // Reativou o ciclo
                         }
                     } else {
                         alert("Número inválido.");
@@ -607,14 +621,44 @@
                     dailyBadge = `<span class="badge badge-red">🚨 ${diffDays} Dias Atrasado</span>`;
                 }
 
+                // Cálculo de tempo de atividade (Início e Término)
+                let dateInfoHTML = '';
+                if (sub.startDate) {
+                    const startDateObj = new Date(sub.startDate);
+                    const startStr = startDateObj.toLocaleDateString('pt-BR');
+                    
+                    let targetDateForCalc = isFinished && sub.endDate ? new Date(sub.endDate) : new Date();
+                    
+                    startDateObj.setHours(0,0,0,0);
+                    const targetDateCopy = new Date(targetDateForCalc);
+                    targetDateCopy.setHours(0,0,0,0);
+                    
+                    const tempoDiff = Math.abs(targetDateCopy - startDateObj);
+                    const tempoDias = Math.floor(tempoDiff / (1000 * 60 * 60 * 24));
+                    const labelDias = tempoDias === 1 ? '1 dia' : `${tempoDias} dias`;
+
+                    if (isFinished && sub.endDate) {
+                        const endStr = new Date(sub.endDate).toLocaleDateString('pt-BR');
+                        dateInfoHTML = `<div style="font-size: 0.85rem; color: #aaa; margin-top: 8px;">
+                            📅 Início: ${startStr} | Término: ${endStr}<br>
+                            <span style="color: #4CAF50;">Duração total: ${labelDias}</span>
+                        </div>`;
+                    } else {
+                        dateInfoHTML = `<div style="font-size: 0.85rem; color: #aaa; margin-top: 8px;">
+                            📅 Início: ${startStr}<br>
+                            <span style="color: #2196F3;">Em andamento há ${labelDias}</span>
+                        </div>`;
+                    }
+                }
+
                 card.className = cardClass;
 
-                // Modificado para adicionar o botão de Editar ao lado do de Excluir
                 card.innerHTML = `
                     <div class="subject-header">
                         <div>
                             <div class="subject-title">${sub.name}</div>
                             ${dailyBadge}
+                            ${dateInfoHTML}
                         </div>
                         <span class="subject-progress">${statusText}</span>
                     </div>
@@ -732,6 +776,11 @@
                 subject.currentIndex++;
                 
                 subject.lastStudiedDate = new Date().toDateString(); 
+                
+                // Registra a data de término caso este seja o último passo
+                if (subject.currentIndex >= subject.sequence.length && !subject.endDate) {
+                    subject.endDate = new Date().toISOString();
+                }
                 
                 salvarDados();
                 atualizarTelaEstudo();
