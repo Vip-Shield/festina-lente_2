@@ -55,7 +55,7 @@
             font-size: 1.8rem;
             text-transform: uppercase;
             letter-spacing: 2px;
-            margin: 0; /* Removido margin-bottom para alinhar perfeitamente */
+            margin: 0; 
         }
 
         .settings-menu {
@@ -355,7 +355,8 @@
     </div>
 
     <script>
-        let subjects = JSON.parse(localStorage.getItem('studyPWA_subjects')) || [];
+        // Modificado o nome de 'studyPWA_subjects' para 'cicloVideos_subjects'
+        let subjects = JSON.parse(localStorage.getItem('cicloVideos_subjects')) || [];
         let activeSubjectId = null;
 
         /* Funções de Importação e Exportação */
@@ -441,7 +442,8 @@
         }
 
         function salvarDados() {
-            localStorage.setItem('studyPWA_subjects', JSON.stringify(subjects));
+            // Modificado o nome de 'studyPWA_subjects' para 'cicloVideos_subjects'
+            localStorage.setItem('cicloVideos_subjects', JSON.stringify(subjects));
         }
 
         function adicionarMateria() {
