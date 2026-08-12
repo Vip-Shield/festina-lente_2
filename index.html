@@ -148,8 +148,17 @@
         .btn-secondary { background-color: #2196F3; }
         .btn-secondary:hover { background-color: #0b7dda; }
         
-        .btn-danger { background-color: #f44336; padding: 8px; font-size: 0.9rem; margin-top: 5px;}
+        .btn-edit { background-color: #ff9800; padding: 8px; font-size: 0.9rem; margin-top: 5px; flex: 1; margin-bottom: 0;}
+        .btn-edit:hover { background-color: #e68a00; }
+
+        .btn-danger { background-color: #f44336; padding: 8px; font-size: 0.9rem; margin-top: 5px; flex: 1; margin-bottom: 0;}
         .btn-danger:hover { background-color: #da190b; }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            width: 100%;
+        }
 
         /* Dashboard de Matérias */
         .subject-card {
@@ -355,7 +364,6 @@
     </div>
 
     <script>
-        // Modificado o nome de 'studyPWA_subjects' para 'cicloVideos_subjects'
         let subjects = JSON.parse(localStorage.getItem('cicloVideos_subjects')) || [];
         let activeSubjectId = null;
 
@@ -442,7 +450,6 @@
         }
 
         function salvarDados() {
-            // Modificado o nome de 'studyPWA_subjects' para 'cicloVideos_subjects'
             localStorage.setItem('cicloVideos_subjects', JSON.stringify(subjects));
         }
 
@@ -498,6 +505,54 @@
             renderizarDashboard();
         }
 
+        /* Nova Função de Edição */
+        function editarMateria(id) {
+            const subject = subjects.find(sub => sub.id === id);
+            if (!subject) return;
+
+            const novoNome = prompt("Editar Nome do Ciclo:", subject.name);
+            if (novoNome === null) return; // Cancelou a edição
+            
+            if (novoNome.trim() !== "") {
+                subject.name = novoNome.trim();
+            }
+
+            if (subject.isCustom) {
+                const novaSequenciaStr = prompt("Editar lista (separada por vírgula):", subject.sequence.join(', '));
+                if (novaSequenciaStr !== null) {
+                    const novaSequencia = novaSequenciaStr.split(',').map(item => item.trim()).filter(item => item.length > 0);
+                    if (novaSequencia.length > 0) {
+                        subject.sequence = novaSequencia;
+                        subject.total = novaSequencia.length;
+                        // Ajusta o progresso caso a nova lista seja menor que a anterior
+                        if (subject.currentIndex > novaSequencia.length) {
+                            subject.currentIndex = novaSequencia.length;
+                        }
+                    } else {
+                        alert("A lista não pode ficar vazia.");
+                    }
+                }
+            } else {
+                const novoTotalStr = prompt("Editar Total de Capítulos/Aulas:", subject.total);
+                if (novoTotalStr !== null) {
+                    const novoTotal = parseInt(novoTotalStr);
+                    if (!isNaN(novoTotal) && novoTotal > 0) {
+                        subject.total = novoTotal;
+                        subject.sequence = gerarSequencia(novoTotal);
+                        // Ajusta o progresso caso o novo total gere uma sequência menor
+                        if (subject.currentIndex > subject.sequence.length) {
+                            subject.currentIndex = subject.sequence.length;
+                        }
+                    } else {
+                        alert("Número inválido.");
+                    }
+                }
+            }
+
+            salvarDados();
+            renderizarDashboard();
+        }
+
         function excluirMateria(id) {
             if(confirm("Tem certeza que deseja excluir este ciclo? O progresso será perdido.")) {
                 subjects = subjects.filter(sub => sub.id !== id);
@@ -515,7 +570,6 @@
                 return;
             }
 
-            // Calcula a data de hoje zerando as horas para comparar corretamente
             const today = new Date();
             today.setHours(0, 0, 0, 0);
 
@@ -525,8 +579,7 @@
                 const isFinished = sub.currentIndex >= sub.sequence.length;
                 const statusText = isFinished ? "Concluído!" : `Passo ${sub.currentIndex} de ${sub.sequence.length}`;
                 
-                // Lógica para contar os dias passados desde o último estudo
-                let diffDays = 1; // Padrão se nunca estudou (Pendente Hoje)
+                let diffDays = 1; 
                 
                 if (sub.lastStudiedDate) {
                     const lastDate = new Date(sub.lastStudiedDate);
@@ -556,6 +609,7 @@
 
                 card.className = cardClass;
 
+                // Modificado para adicionar o botão de Editar ao lado do de Excluir
                 card.innerHTML = `
                     <div class="subject-header">
                         <div>
@@ -565,7 +619,10 @@
                         <span class="subject-progress">${statusText}</span>
                     </div>
                     <button onclick="abrirEstudo(${sub.id})">${isFinished ? 'Ver Resultado' : 'Continuar Estudando'}</button>
-                    <button class="btn-danger" onclick="excluirMateria(${sub.id})">Excluir</button>
+                    <div class="action-buttons">
+                        <button class="btn-edit" onclick="editarMateria(${sub.id})">Editar</button>
+                        <button class="btn-danger" onclick="excluirMateria(${sub.id})">Excluir</button>
+                    </div>
                 `;
                 list.appendChild(card);
             });
