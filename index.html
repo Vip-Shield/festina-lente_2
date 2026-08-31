@@ -326,6 +326,7 @@
                 <select id="cycleType" onchange="toggleCycleInputs()">
                     <option value="feynman">Técnica de Repetição (Festina Lente)</option>
                     <option value="custom">Lista de Matérias/Tópicos Personalizada</option>
+                    <option value="carousel">Carrossel Rotativo Diário</option>
                 </select>
 
                 <div id="inputFeynman">
@@ -453,6 +454,25 @@
             localStorage.setItem('cicloVideos_subjects', JSON.stringify(subjects));
         }
 
+        function verificarRotacaoDiaria() {
+            const hoje = new Date().toDateString();
+            let mudou = false;
+            subjects.forEach(sub => {
+                if (sub.isCarousel && sub.lastDayRotated !== hoje) {
+                    if (sub.dailyStudiedCount > 0) {
+                        const count = sub.dailyStudiedCount % sub.sequence.length;
+                        const estudados = sub.sequence.splice(0, count);
+                        sub.sequence.push(...estudados);
+                    }
+                    sub.dailyStudiedCount = 0; 
+                    sub.currentIndex = 0;
+                    sub.lastDayRotated = hoje;
+                    mudou = true;
+                }
+            });
+            if (mudou) salvarDados();
+        }
+
         function adicionarMateria() {
             const nameInput = document.getElementById('subjectName');
             const cycleType = document.getElementById('cycleType').value;
@@ -466,6 +486,7 @@
             let sequence = [];
             let total = 0;
             let isCustom = false;
+            let isCarousel = false;
 
             if (cycleType === 'feynman') {
                 const chaptersInput = document.getElementById('totalChapters');
@@ -475,7 +496,7 @@
                     return;
                 }
                 sequence = gerarSequencia(total);
-            } else {
+            } else if (cycleType === 'custom') {
                 const customInput = document.getElementById('customSequence').value;
                 sequence = customInput.split(',').map(item => item.trim()).filter(item => item.length > 0);
                 if (sequence.length === 0) {
@@ -484,6 +505,12 @@
                 }
                 total = sequence.length;
                 isCustom = true;
+            } else if (cycleType === 'carousel') {
+                const customInput = document.getElementById('customSequence').value;
+                sequence = customInput.split(',').map(item => item.trim()).filter(item => item.length > 0);
+                if (sequence.length === 0) { alert("Insira pelo menos uma matéria na lista."); return; }
+                total = sequence.length;
+                isCarousel = true;
             }
 
             const newSubject = {
@@ -493,6 +520,9 @@
                 sequence: sequence,
                 currentIndex: 0,
                 isCustom: isCustom,
+                isCarousel: isCarousel,
+                dailyStudiedCount: 0,
+                lastDayRotated: new Date().toDateString(),
                 lastStudiedDate: null,
                 startDate: new Date().toISOString(),
                 endDate: null
@@ -519,22 +549,27 @@
                 subject.name = novoNome.trim();
             }
 
-            if (subject.isCustom) {
+            if (subject.isCustom || subject.isCarousel) {
                 const novaSequenciaStr = prompt("Editar lista (separada por vírgula):", subject.sequence.join(', '));
                 if (novaSequenciaStr !== null) {
                     const novaSequencia = novaSequenciaStr.split(',').map(item => item.trim()).filter(item => item.length > 0);
                     if (novaSequencia.length > 0) {
                         subject.sequence = novaSequencia;
                         subject.total = novaSequencia.length;
-                        // Ajusta o progresso caso a nova lista seja menor que a anterior
-                        if (subject.currentIndex > novaSequencia.length) {
-                            subject.currentIndex = novaSequencia.length;
-                        }
-                        // Verifica se após editar a lista o ciclo ficou concluído
-                        if (subject.currentIndex >= novaSequencia.length && !subject.endDate) {
-                            subject.endDate = new Date().toISOString();
-                        } else if (subject.currentIndex < novaSequencia.length && subject.endDate) {
-                            subject.endDate = null; // Reativou o ciclo
+                        
+                        if (subject.isCarousel) {
+                            subject.dailyStudiedCount = Math.min(subject.dailyStudiedCount || 0, novaSequencia.length);
+                        } else {
+                            // Ajusta o progresso caso a nova lista seja menor que a anterior
+                            if (subject.currentIndex > novaSequencia.length) {
+                                subject.currentIndex = novaSequencia.length;
+                            }
+                            // Verifica se após editar a lista o ciclo ficou concluído
+                            if (subject.currentIndex >= novaSequencia.length && !subject.endDate) {
+                                subject.endDate = new Date().toISOString();
+                            } else if (subject.currentIndex < novaSequencia.length && subject.endDate) {
+                                subject.endDate = null; // Reativou o ciclo
+                            }
                         }
                     } else {
                         alert("A lista não pode ficar vazia.");
@@ -576,6 +611,8 @@
         }
 
         function renderizarDashboard() {
+            verificarRotacaoDiaria();
+
             const list = document.getElementById('subjectsList');
             list.innerHTML = '';
 
@@ -590,8 +627,16 @@
             subjects.forEach(sub => {
                 const card = document.createElement('div');
                 
-                const isFinished = sub.currentIndex >= sub.sequence.length;
-                const statusText = isFinished ? "Concluído!" : `Passo ${sub.currentIndex} de ${sub.sequence.length}`;
+                let isFinished = false;
+                let statusText = '';
+                
+                if (sub.isCarousel) {
+                    isFinished = sub.dailyStudiedCount >= sub.sequence.length;
+                    statusText = isFinished ? "Tudo estudado hoje!" : `${sub.dailyStudiedCount || 0}/${sub.sequence.length} Hoje`;
+                } else {
+                    isFinished = sub.currentIndex >= sub.sequence.length;
+                    statusText = isFinished ? "Concluído!" : `Passo ${sub.currentIndex} de ${sub.sequence.length}`;
+                }
                 
                 let diffDays = 1; 
                 
@@ -605,7 +650,7 @@
                 let cardClass = 'subject-card';
                 let dailyBadge = '';
 
-                if (isFinished) {
+                if (isFinished && !sub.isCarousel) {
                     cardClass += ' card-finished';
                     dailyBadge = '<span class="badge badge-finished">🏆 Ciclo Finalizado</span>';
                 } else if (diffDays === 0) {
@@ -627,7 +672,7 @@
                     const startDateObj = new Date(sub.startDate);
                     const startStr = startDateObj.toLocaleDateString('pt-BR');
                     
-                    let targetDateForCalc = isFinished && sub.endDate ? new Date(sub.endDate) : new Date();
+                    let targetDateForCalc = isFinished && sub.endDate && !sub.isCarousel ? new Date(sub.endDate) : new Date();
                     
                     startDateObj.setHours(0,0,0,0);
                     const targetDateCopy = new Date(targetDateForCalc);
@@ -637,7 +682,7 @@
                     const tempoDias = Math.floor(tempoDiff / (1000 * 60 * 60 * 24));
                     const labelDias = tempoDias === 1 ? '1 dia' : `${tempoDias} dias`;
 
-                    if (isFinished && sub.endDate) {
+                    if (isFinished && sub.endDate && !sub.isCarousel) {
                         const endStr = new Date(sub.endDate).toLocaleDateString('pt-BR');
                         dateInfoHTML = `<div style="font-size: 0.85rem; color: #aaa; margin-top: 8px;">
                             📅 Início: ${startStr} | Término: ${endStr}<br>
@@ -662,7 +707,7 @@
                         </div>
                         <span class="subject-progress">${statusText}</span>
                     </div>
-                    <button onclick="abrirEstudo(${sub.id})">${isFinished ? 'Ver Resultado' : 'Continuar Estudando'}</button>
+                    <button onclick="abrirEstudo(${sub.id})">${isFinished && !sub.isCarousel ? 'Ver Resultado' : 'Continuar Estudando'}</button>
                     <div class="action-buttons">
                         <button class="btn-edit" onclick="editarMateria(${sub.id})">Editar</button>
                         <button class="btn-danger" onclick="excluirMateria(${sub.id})">Excluir</button>
@@ -698,89 +743,131 @@
             const trailContainer = document.getElementById('trailContainer');
             const sequenceTrail = document.getElementById('sequenceTrail');
 
-            progressDisplay.innerText = `${subject.currentIndex}/${subject.sequence.length} Passos`;
+            if (subject.isCarousel) {
+                progressDisplay.innerText = `${subject.dailyStudiedCount || 0}/${subject.sequence.length} Passos Hoje`;
+                trailContainer.style.display = 'block';
 
-            trailContainer.style.display = 'block';
-            
-            let sequenceObjs = subject.sequence.map((val, idx) => ({ val, idx }));
-            let blocos = [];
-            let i = 0;
-
-            if (sequenceObjs.length >= 2 && !subject.isCustom) {
-                blocos.push(sequenceObjs.slice(0, 2));
-                i = 2;
-            } else if (sequenceObjs.length > 0 && !subject.isCustom) {
-                blocos.push(sequenceObjs.slice(0, 1));
-                i = 1;
-            }
-
-            while (i < sequenceObjs.length) {
-                blocos.push(sequenceObjs.slice(i, i + 4));
-                i += 4;
-            }
-
-            let blocoAtivo;
-            if (subject.currentIndex < subject.sequence.length) {
-                blocoAtivo = blocos.find(bloco => bloco.some(item => item.idx === subject.currentIndex));
-            } else {
-                blocoAtivo = blocos[blocos.length - 1];
-            }
-
-            if (blocoAtivo) {
-                let itemsHTML = blocoAtivo.map(item => {
+                let itemsHTML = subject.sequence.map((val, idx) => {
                     let statusClass = '';
-                    if (item.idx < subject.currentIndex) statusClass = 'done';
-                    else if (item.idx === subject.currentIndex) statusClass = 'active';
-                    
-                    return `<span class="trail-item ${statusClass}">${item.val}</span>`;
+                    if (idx < (subject.dailyStudiedCount || 0)) statusClass = 'done';
+                    else if (idx === (subject.dailyStudiedCount || 0)) statusClass = 'active';
+                    return `<span class="trail-item ${statusClass}">${val}</span>`;
                 }).join(', ');
-                
                 sequenceTrail.innerHTML = `<div class="trail-bloco">[ ${itemsHTML} ]</div>`;
-            } else {
-                sequenceTrail.innerHTML = '';
-            }
 
-            if (subject.currentIndex < subject.sequence.length) {
-                const currentVal = subject.sequence[subject.currentIndex];
-                
-                if (subject.isCustom) {
-                    chapterDisplay.innerText = currentVal;
-                    actionType.innerText = "Estudo Direcionado";
+                if ((subject.dailyStudiedCount || 0) < subject.sequence.length) {
+                    chapterDisplay.innerText = subject.sequence[subject.dailyStudiedCount || 0];
+                    actionType.innerText = "Estudo do Carrossel";
                     actionType.style.color = "#4CAF50";
+                    nextBtn.disabled = false;
+                    nextBtn.innerText = "Marcar como Concluído";
                 } else {
-                    chapterDisplay.innerText = `Capítulo ${currentVal}`;
-                    const positionInBlock = subject.currentIndex % 4;
-                    if (positionInBlock < 2) {
-                        actionType.innerText = "Primeiro Estudo";
-                        actionType.style.color = "#4CAF50";
-                    } else {
-                        actionType.innerText = "Revisão de Fixação";
-                        actionType.style.color = "#2196F3";
-                    }
+                    chapterDisplay.innerText = "Meta Diária Atingida!";
+                    actionType.innerText = "Amanhã a fila será atualizada com os lugares trocados.";
+                    actionType.style.color = "#FFD700";
+                    nextBtn.disabled = true;
+                    nextBtn.innerText = "Finalizado por Hoje";
+                }
+            } else {
+                progressDisplay.innerText = `${subject.currentIndex}/${subject.sequence.length} Passos`;
+                trailContainer.style.display = 'block';
+                
+                let sequenceObjs = subject.sequence.map((val, idx) => ({ val, idx }));
+                let blocos = [];
+                let i = 0;
+
+                if (sequenceObjs.length >= 2 && !subject.isCustom) {
+                    blocos.push(sequenceObjs.slice(0, 2));
+                    i = 2;
+                } else if (sequenceObjs.length > 0 && !subject.isCustom) {
+                    blocos.push(sequenceObjs.slice(0, 1));
+                    i = 1;
                 }
 
-                nextBtn.disabled = false;
-                nextBtn.innerText = "Avançar";
-            } else {
-                chapterDisplay.innerText = "Fim!";
-                actionType.innerText = "Ciclo concluído com sucesso.";
-                actionType.style.color = "#FFD700";
-                nextBtn.disabled = true;
-                nextBtn.innerText = "Finalizado";
+                while (i < sequenceObjs.length) {
+                    blocos.push(sequenceObjs.slice(i, i + 4));
+                    i += 4;
+                }
+
+                let blocoAtivo;
+                if (subject.currentIndex < subject.sequence.length) {
+                    blocoAtivo = blocos.find(bloco => bloco.some(item => item.idx === subject.currentIndex));
+                } else {
+                    blocoAtivo = blocos[blocos.length - 1];
+                }
+
+                if (blocoAtivo) {
+                    let itemsHTML = blocoAtivo.map(item => {
+                        let statusClass = '';
+                        if (item.idx < subject.currentIndex) statusClass = 'done';
+                        else if (item.idx === subject.currentIndex) statusClass = 'active';
+                        
+                        return `<span class="trail-item ${statusClass}">${item.val}</span>`;
+                    }).join(', ');
+                    
+                    sequenceTrail.innerHTML = `<div class="trail-bloco">[ ${itemsHTML} ]</div>`;
+                } else {
+                    sequenceTrail.innerHTML = '';
+                }
+
+                if (subject.currentIndex < subject.sequence.length) {
+                    const currentVal = subject.sequence[subject.currentIndex];
+                    
+                    if (subject.isCustom) {
+                        chapterDisplay.innerText = currentVal;
+                        actionType.innerText = "Estudo Direcionado";
+                        actionType.style.color = "#4CAF50";
+                    } else {
+                        chapterDisplay.innerText = `Capítulo ${currentVal}`;
+                        const positionInBlock = subject.currentIndex % 4;
+                        if (positionInBlock < 2) {
+                            actionType.innerText = "Primeiro Estudo";
+                            actionType.style.color = "#4CAF50";
+                        } else {
+                            actionType.innerText = "Revisão de Fixação";
+                            actionType.style.color = "#2196F3";
+                        }
+                    }
+
+                    nextBtn.disabled = false;
+                    nextBtn.innerText = "Avançar";
+                } else {
+                    chapterDisplay.innerText = "Fim!";
+                    actionType.innerText = "Ciclo concluído com sucesso.";
+                    actionType.style.color = "#FFD700";
+                    nextBtn.disabled = true;
+                    nextBtn.innerText = "Finalizado";
+                }
             }
         }
 
         function avancarPasso() {
-            const subject = subjects.find(sub => sub.id === activeSubjectId);
-            if (subject && subject.currentIndex < subject.sequence.length) {
-                subject.currentIndex++;
-                
-                subject.lastStudiedDate = new Date().toDateString(); 
-                
-                // Registra a data de término caso este seja o último passo
-                if (subject.currentIndex >= subject.sequence.length && !subject.endDate) {
-                    subject.endDate = new Date().toISOString();
+            const subjectIndex = subjects.findIndex(sub => sub.id === activeSubjectId);
+            if (subjectIndex === -1) return;
+            
+            const subject = subjects[subjectIndex];
+            let houveAvanco = false;
+
+            if (subject.isCarousel) {
+                if (subject.dailyStudiedCount < subject.sequence.length) {
+                    subject.dailyStudiedCount++;
+                    subject.lastStudiedDate = new Date().toDateString();
+                    houveAvanco = true;
                 }
+            } else {
+                if (subject.currentIndex < subject.sequence.length) {
+                    subject.currentIndex++;
+                    subject.lastStudiedDate = new Date().toDateString(); 
+                    if (subject.currentIndex >= subject.sequence.length && !subject.endDate) {
+                        subject.endDate = new Date().toISOString();
+                    }
+                    houveAvanco = true;
+                }
+            }
+
+            if (houveAvanco) {
+                subjects.splice(subjectIndex, 1); 
+                subjects.push(subject);           
                 
                 salvarDados();
                 atualizarTelaEstudo();
