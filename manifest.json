@@ -1,7 +1,7 @@
 {
-  "name": "Ciclo de Vídeos",
-  "short_name": "Ciclo de Vídeos",
-  "description": "Aplicativo para gerenciamento de ciclos de vídeos e revisões.",
+  "name": "Ciclo Universitário",
+  "short_name": "Ciclo Universitário",
+  "description": "Aplicativo para gerenciamento de ciclos de estudos Universitário e revisões.",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#0f2027",
