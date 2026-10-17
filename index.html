@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ciclo Universitário</title>
+    <title>Ciclo de Vídeos</title>
     <link rel="shortcut icon" type="imagex/png" href="icon.ico">
     <meta name="theme-color" content="#4CAF50">
     <link rel="apple-touch-icon" href="icon-192.png">
@@ -306,7 +306,7 @@
         
         <div id="dashboardSection">
             <div class="header-container">
-                <h1>Ciclo Universitário</h1>
+                <h1>Ciclo de Vídeos</h1>
                 <div class="settings-menu">
                     <span class="gear-icon" onclick="toggleMenu()">⚙️</span>
                     <div id="dropdownMenu" class="dropdown-content">
@@ -324,7 +324,8 @@
                 <input type="text" id="subjectName" placeholder="Nome do Ciclo (Ex: Concurso, Revisão)" required>
                 
                 <select id="cycleType" onchange="toggleCycleInputs()">
-                    <option value="feynman">Técnica de Repetição (Festina Lente)</option>
+                    <option value="feynman2">Festina Lente - Repetição Dupla (2x2)</option>
+                    <option value="feynman3">Festina Lente - Repetição Tripla (3x3)</option>
                     <option value="custom">Lista de Matérias/Tópicos Personalizada</option>
                     <option value="carousel">Carrossel Rotativo Diário</option>
                 </select>
@@ -421,7 +422,7 @@
                 } catch (err) {
                     alert("Erro ao ler o arquivo JSON.");
                 }
-                event.target.value = ''; // Limpa o input para permitir importar o mesmo arquivo depois
+                event.target.value = '';
             };
             reader.readAsText(file);
         }
@@ -429,7 +430,7 @@
 
         function toggleCycleInputs() {
             const type = document.getElementById('cycleType').value;
-            if (type === 'feynman') {
+            if (type === 'feynman2' || type === 'feynman3') {
                 document.getElementById('inputFeynman').style.display = 'block';
                 document.getElementById('inputCustom').style.display = 'none';
             } else {
@@ -438,13 +439,29 @@
             }
         }
 
-        function gerarSequencia(total) {
+        function gerarSequencia2(total) {
             let seq = [];
             for (let i = 1; i <= total; i += 2) {
                 if (i + 1 <= total) {
                     seq.push(i, i + 1, i, i + 1);
                 } else {
                     seq.push(i, i);
+                }
+            }
+            return seq;
+        }
+
+        function gerarSequencia3(total) {
+            let seq = [];
+            for (let i = 1; i <= total; i += 3) {
+                let bloco = [];
+                for (let j = 0; j < 3; j++) {
+                    if (i + j <= total) {
+                        bloco.push(i + j);
+                    }
+                }
+                for (let k = 0; k < 3; k++) {
+                    seq = seq.concat(bloco);
                 }
             }
             return seq;
@@ -487,15 +504,22 @@
             let total = 0;
             let isCustom = false;
             let isCarousel = false;
+            let mode = 'feynman2';
 
-            if (cycleType === 'feynman') {
+            if (cycleType === 'feynman2' || cycleType === 'feynman3') {
                 const chaptersInput = document.getElementById('totalChapters');
                 total = parseInt(chaptersInput.value);
                 if (isNaN(total) || total <= 0) {
                     alert("Preencha um número válido de capítulos.");
                     return;
                 }
-                sequence = gerarSequencia(total);
+                if (cycleType === 'feynman2') {
+                    sequence = gerarSequencia2(total);
+                    mode = 'feynman2';
+                } else {
+                    sequence = gerarSequencia3(total);
+                    mode = 'feynman3';
+                }
             } else if (cycleType === 'custom') {
                 const customInput = document.getElementById('customSequence').value;
                 sequence = customInput.split(',').map(item => item.trim()).filter(item => item.length > 0);
@@ -521,6 +545,7 @@
                 currentIndex: 0,
                 isCustom: isCustom,
                 isCarousel: isCarousel,
+                mode: mode,
                 dailyStudiedCount: 0,
                 lastDayRotated: new Date().toDateString(),
                 lastStudiedDate: null,
@@ -537,13 +562,13 @@
             renderizarDashboard();
         }
 
-        /* Nova Função de Edição */
+        /* Função de Edição */
         function editarMateria(id) {
             const subject = subjects.find(sub => sub.id === id);
             if (!subject) return;
 
             const novoNome = prompt("Editar Nome do Ciclo:", subject.name);
-            if (novoNome === null) return; // Cancelou a edição
+            if (novoNome === null) return;
             
             if (novoNome.trim() !== "") {
                 subject.name = novoNome.trim();
@@ -560,15 +585,13 @@
                         if (subject.isCarousel) {
                             subject.dailyStudiedCount = Math.min(subject.dailyStudiedCount || 0, novaSequencia.length);
                         } else {
-                            // Ajusta o progresso caso a nova lista seja menor que a anterior
                             if (subject.currentIndex > novaSequencia.length) {
                                 subject.currentIndex = novaSequencia.length;
                             }
-                            // Verifica se após editar a lista o ciclo ficou concluído
                             if (subject.currentIndex >= novaSequencia.length && !subject.endDate) {
                                 subject.endDate = new Date().toISOString();
                             } else if (subject.currentIndex < novaSequencia.length && subject.endDate) {
-                                subject.endDate = null; // Reativou o ciclo
+                                subject.endDate = null;
                             }
                         }
                     } else {
@@ -581,16 +604,18 @@
                     const novoTotal = parseInt(novoTotalStr);
                     if (!isNaN(novoTotal) && novoTotal > 0) {
                         subject.total = novoTotal;
-                        subject.sequence = gerarSequencia(novoTotal);
-                        // Ajusta o progresso caso o novo total gere uma sequência menor
+                        if (subject.mode === 'feynman3') {
+                            subject.sequence = gerarSequencia3(novoTotal);
+                        } else {
+                            subject.sequence = gerarSequencia2(novoTotal);
+                        }
                         if (subject.currentIndex > subject.sequence.length) {
                             subject.currentIndex = subject.sequence.length;
                         }
-                        // Verifica se após editar o ciclo ficou concluído
                         if (subject.currentIndex >= subject.sequence.length && !subject.endDate) {
                             subject.endDate = new Date().toISOString();
                         } else if (subject.currentIndex < subject.sequence.length && subject.endDate) {
-                            subject.endDate = null; // Reativou o ciclo
+                            subject.endDate = null;
                         }
                     } else {
                         alert("Número inválido.");
@@ -666,7 +691,6 @@
                     dailyBadge = `<span class="badge badge-red">🚨 ${diffDays} Dias Atrasado</span>`;
                 }
 
-                // Cálculo de tempo de atividade (Início e Término)
                 let dateInfoHTML = '';
                 if (sub.startDate) {
                     const startDateObj = new Date(sub.startDate);
@@ -776,17 +800,20 @@
                 let blocos = [];
                 let i = 0;
 
-                if (sequenceObjs.length >= 2 && !subject.isCustom) {
+                const is3x3 = subject.mode === 'feynman3';
+                const blockSize = is3x3 ? 9 : 4;
+
+                if (!is3x3 && sequenceObjs.length >= 2 && !subject.isCustom) {
                     blocos.push(sequenceObjs.slice(0, 2));
                     i = 2;
-                } else if (sequenceObjs.length > 0 && !subject.isCustom) {
+                } else if (!is3x3 && sequenceObjs.length > 0 && !subject.isCustom) {
                     blocos.push(sequenceObjs.slice(0, 1));
                     i = 1;
                 }
 
                 while (i < sequenceObjs.length) {
-                    blocos.push(sequenceObjs.slice(i, i + 4));
-                    i += 4;
+                    blocos.push(sequenceObjs.slice(i, i + blockSize));
+                    i += blockSize;
                 }
 
                 let blocoAtivo;
@@ -819,13 +846,28 @@
                         actionType.style.color = "#4CAF50";
                     } else {
                         chapterDisplay.innerText = `Capítulo ${currentVal}`;
-                        const positionInBlock = subject.currentIndex % 4;
-                        if (positionInBlock < 2) {
-                            actionType.innerText = "Primeiro Estudo";
-                            actionType.style.color = "#4CAF50";
+                        
+                        if (is3x3) {
+                            const positionInBlock = subject.currentIndex % 9;
+                            if (positionInBlock < 3) {
+                                actionType.innerText = "Primeiro Estudo";
+                                actionType.style.color = "#4CAF50";
+                            } else if (positionInBlock < 6) {
+                                actionType.innerText = "Segunda Passagem";
+                                actionType.style.color = "#FF9800";
+                            } else {
+                                actionType.innerText = "Revisão Final";
+                                actionType.style.color = "#2196F3";
+                            }
                         } else {
-                            actionType.innerText = "Revisão de Fixação";
-                            actionType.style.color = "#2196F3";
+                            const positionInBlock = subject.currentIndex % 4;
+                            if (positionInBlock < 2) {
+                                actionType.innerText = "Primeiro Estudo";
+                                actionType.style.color = "#4CAF50";
+                            } else {
+                                actionType.innerText = "Revisão de Fixação";
+                                actionType.style.color = "#2196F3";
+                            }
                         }
                     }
 
